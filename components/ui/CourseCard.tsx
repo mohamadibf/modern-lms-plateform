@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 interface CourseCardProps {
   icon: ReactNode;
+  iconClassName?: string;
   title: string;
   description: string;
   level: string;
@@ -12,6 +13,7 @@ interface CourseCardProps {
 
 export function CourseCard({
   icon,
+  iconClassName = "bg-neutral-900 text-white",
   title,
   description,
   level,
@@ -20,7 +22,9 @@ export function CourseCard({
 }: CourseCardProps) {
   return (
     <div className="rounded-lg border border-neutral-100 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex size-10 items-center justify-center rounded-sm bg-neutral-900 font-sans text-sm font-semibold text-white">
+      <div
+        className={`mb-4 flex size-10 items-center justify-center rounded-sm font-sans text-sm font-semibold ${iconClassName}`}
+      >
         {icon}
       </div>
       <h3 className="font-sans text-lg font-semibold text-neutral-900">
