@@ -1,13 +1,15 @@
-import { ArrowRight, Bell, Star, User } from "lucide-react";
+import { SignInButton, SignUpButton, Show, UserButton } from "@clerk/nextjs";
+import { ArrowRight, Bell, Star } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CourseCard } from "@/components/ui/CourseCard";
+import { DockerMark, NextMark, TypeScriptMark } from "@/components/ui/CourseMarks";
 import { Navigation } from "@/components/ui/Navigation";
 import { SearchInput } from "@/components/ui/Input";
 
 const courses = [
   {
-    icon: <span className="font-display">N</span>,
-    iconClassName: "bg-neutral-900 text-white",
+    icon: <NextMark />,
+    iconClassName: "rounded-lg bg-neutral-900 text-white",
     title: "Next.js for Production",
     description: "Build scalable, high-performance web applications with Next.js.",
     level: "Intermediate",
@@ -15,8 +17,8 @@ const courses = [
     moduleCount: 12,
   },
   {
-    icon: <span className="text-xl">🐳</span>,
-    iconClassName: "bg-white",
+    icon: <DockerMark />,
+    iconClassName: "",
     title: "Docker Essentials",
     description: "Containerize applications and streamline your development workflow.",
     level: "Beginner",
@@ -24,8 +26,8 @@ const courses = [
     moduleCount: 8,
   },
   {
-    icon: <span className="font-display">TS</span>,
-    iconClassName: "bg-info-500 text-white",
+    icon: <TypeScriptMark />,
+    iconClassName: "rounded-lg overflow-hidden",
     title: "TypeScript Deep Dive",
     description: "Go beyond the basics and write safer, more expressive code.",
     level: "Intermediate",
@@ -53,9 +55,29 @@ export default function Home() {
             >
               <Bell className="size-5" />
             </button>
-            <span className="flex size-9 items-center justify-center rounded-full bg-neutral-200 text-neutral-500">
-              <User className="size-5" />
-            </span>
+            <Show when="signed-out">
+              <div className="flex items-center gap-3">
+                <SignInButton>
+                  <button
+                    type="button"
+                    className="font-sans text-sm font-medium text-neutral-500 hover:text-neutral-900"
+                  >
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton>
+                  <button
+                    type="button"
+                    className="rounded-xs bg-primary-500 px-4 py-2 font-sans text-sm font-semibold text-white hover:bg-primary-400"
+                  >
+                    Sign up
+                  </button>
+                </SignUpButton>
+              </div>
+            </Show>
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
           </div>
         }
       />
