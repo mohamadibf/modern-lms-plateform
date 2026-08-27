@@ -1,7 +1,7 @@
 import { defineQuery } from "next-sanity";
 
 export const COURSES_LIST_QUERY = defineQuery(`
-  *[_type == "course" && defined(slug.current)] | order(_createdAt desc) {
+  *[_type == "course" && defined(slug.current)] | order(popular desc, _createdAt desc) {
     _id,
     title,
     "slug": slug.current,

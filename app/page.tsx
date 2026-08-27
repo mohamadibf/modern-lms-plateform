@@ -1,44 +1,24 @@
 import { SignInButton, SignUpButton, Show, UserButton } from "@clerk/nextjs";
 import { ArrowRight, Bell, Star } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CourseCard } from "@/components/ui/CourseCard";
-import { DockerMark, NextMark, TypeScriptMark } from "@/components/ui/CourseMarks";
 import { Navigation } from "@/components/ui/Navigation";
 import { SearchInput } from "@/components/ui/Input";
-
-const courses = [
-  {
-    icon: <NextMark />,
-    iconClassName: "rounded-lg bg-neutral-900 text-white",
-    title: "Next.js for Production",
-    description: "Build scalable, high-performance web applications with Next.js.",
-    level: "Intermediate",
-    duration: "18h 24m",
-    moduleCount: 12,
-  },
-  {
-    icon: <DockerMark />,
-    iconClassName: "",
-    title: "Docker Essentials",
-    description: "Containerize applications and streamline your development workflow.",
-    level: "Beginner",
-    duration: "10h 12m",
-    moduleCount: 8,
-  },
-  {
-    icon: <TypeScriptMark />,
-    iconClassName: "rounded-lg overflow-hidden",
-    title: "TypeScript Deep Dive",
-    description: "Go beyond the basics and write safer, more expressive code.",
-    level: "Intermediate",
-    duration: "14h 36m",
-    moduleCount: 10,
-  },
-];
+import { formatDuration, formatLevel } from "@/lib/format";
+import { urlFor } from "@/lib/sanity/image";
+import { sanityFetch } from "@/lib/sanity/fetch";
+import { COURSES_LIST_QUERY } from "@/lib/sanity/queries";
 
 const barHeights = [64, 96, 128, 88, 56, 100, 140, 76, 110, 60];
 
-export default function Home() {
+export default async function Home() {
+  const allCourses = await sanityFetch({ query: COURSES_LIST_QUERY });
+  const courses = allCourses
+    .filter((course) => course.slug)
+    .slice(0, 3);
+
   return (
     <div className="min-h-full bg-neutral-50">
       <Navigation
@@ -122,7 +102,34 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {courses.map((course) => (
-            <CourseCard key={course.title} {...course} />
+            <Link key={course._id} href={`/courses/${course.slug}`}>
+              <CourseCard
+                icon={
+                  course.coverImage ? (
+                    <Image
+                      src={urlFor(course.coverImage)
+                        .width(144)
+                        .height(144)
+                        .url()}
+                      alt={course.coverImage.alt ?? course.title ?? ""}
+                      width={72}
+                      height={72}
+                      className="size-full object-cover"
+                    />
+                  ) : null
+                }
+                iconClassName="overflow-hidden rounded-lg"
+                title={course.title ?? ""}
+                description={course.summary ?? ""}
+                level={course.level ? formatLevel(course.level) : ""}
+                duration={
+                  course.totalDurationSeconds != null
+                    ? formatDuration(course.totalDurationSeconds)
+                    : ""
+                }
+                moduleCount={course.moduleCount ?? 0}
+              />
+            </Link>
           ))}
         </div>
       </section>

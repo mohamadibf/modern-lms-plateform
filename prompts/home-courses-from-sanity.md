@@ -2,77 +2,105 @@
 
 ## Goal
 
-Replace the placeholder `courses` array in `app/page.tsx` with real seeded content read through the
-existing server-only data layer, without changing the home page's design.
+Replace the hardcoded `courses` placeholder array in `app/page.tsx` with real seeded content read
+through the existing server-only data layer, without changing the home page's design.
 
 ## Skills and docs read
 
-- `AGENTS.md` — §3 (reference image is the source of truth, reuse existing components), §5 (pages
-  are read-only, Sanity reads are server side), §7 (nothing invented, derived values not stored),
-  §12 (private dataset, token stays on the server), §13 checks.
-- Carried over from `prompts/course-page.md`: the same query layer, TypeGen types, and
-  `next/image` + `cdn.sanity.io` setup landed there.
+- `AGENTS.md` — §3 (reference image is the source of truth), §5 (pages are read-only, Sanity reads
+  are server-only), §7 (nothing invented, derived values not stored), §12 (private dataset, token
+  server-only), §13 checks.
+- Carried over from `prompts/course-page.md` (already implemented): the query layer, TypeGen types,
+  `next/image` + `urlFor` + `cdn.sanity.io` remote pattern all already exist and work end to end
+  against the live seeded dataset.
 
 ## Code inspected
 
-- `app/page.tsx` — `HomeCourse[]` placeholder with hardcoded titles, levels, durations, module
-  counts, and brand-mark logos; renders three `CourseCard layout="stacked"` items in a
-  `sm:grid-cols-2 lg:grid-cols-3` grid, each wrapped in a `Link` to `/courses/<slug>`.
-- `sanity/lib/queries.ts` — `COURSES_LIST_QUERY` already projects title, slug, summary, level,
-  `moduleCount`, `lessonCount`, `durationSeconds`, `coverImage`, ordered popular-first then
-  alphabetical. **No query changes needed.**
-- `components/cards/course-card.tsx` — `logo` is a `ReactNode` with a letter-tile fallback; the
-  stacked layout expects a 72px tile.
-- `components/brand/course-marks.tsx` — the hardcoded Next.js / Docker / TypeScript marks, used
-  only by the placeholder.
-- `lib/format.ts`, `lib/routes.ts` — `formatDuration`, `formatLevel`, `pluralize`, `courseHref`.
+- `app/page.tsx` — a `courses: {icon, iconClassName, title, description, level, duration,
+  moduleCount}[]` placeholder with the `NextMark`/`DockerMark`/`TypeScriptMark` brand SVGs
+  (`components/ui/CourseMarks.tsx`), rendered as three `CourseCard` items in a
+  `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` grid — no links, just static cards.
+- `lib/sanity/queries.ts` — `COURSES_LIST_QUERY` already projects everything the card needs:
+  `title`, `slug`, `summary`, `coverImage`, `level`, `popular`, `moduleCount`,
+  `totalDurationSeconds`. Ordered `_createdAt desc` only — **no popular-first ordering yet**.
+- `components/ui/CourseCard.tsx` — `icon` is a plain `ReactNode` (so a `next/image` cover works as
+  a drop-in replacement for the brand-mark SVGs), `iconClassName` controls the 72px tile's frame
+  (brand marks use `bg-neutral-900`/similar; a real photo needs the tile styled as
+  `overflow-hidden rounded-lg` with no background color, matching the TypeScript mark's pattern).
+  Card itself has no built-in link — the caller wraps it.
+- `lib/format.ts` (already added in the course-page work) — `formatDuration`, `formatLevel`; no
+  `pluralize` helper exists or is needed (`CourseCard` hardcodes the `modules` suffix already).
 - `sanity.types.ts` — `COURSES_LIST_QUERY_RESULT` is generated and current.
+- `lib/sanity/fetch.ts` — `sanityFetch({query, params, tags, revalidate})`, no `CACHE_TAGS` export
+  exists in this codebase (an earlier prompt assumed one from a different iteration — ignored).
 
 ## Decisions and assumptions
 
-1. **The section keeps showing three cards.** The design is one row of three beside a
-   "View all courses" link, so this is a preview, not the full catalog. The page takes the first
-   three of `COURSES_LIST_QUERY` (popular first, then alphabetical) rather than rendering all ten
-   and turning one row into four.
-2. **The logo tile becomes the course `coverImage`**, rendered as a 72px rounded tile via
-   `next/image` + `urlFor`. The brand marks in `components/brand/course-marks.tsx` are left in
-   place — `app/design-system/page.tsx` still uses them — but the home page stops using them.
-3. Meta comes from the data: `formatLevel(level)`, `formatDuration(durationSeconds)`, and
-   `pluralize(moduleCount, "module")`. Missing values render as an empty string rather than a
-   guess.
-4. Layout, spacing, typography, and the card markup are untouched.
+1. **The section keeps showing exactly three cards** (matches `design/vertex-home.png`: one row of
+   three beside "View all courses"). Take the first three results.
+2. **Query gets a small, additive change**: order becomes `order(popular desc, _createdAt desc)` so
+   the homepage preview surfaces popular courses first instead of whatever was created last. This
+   only affects ordering, no field changes, and `courses-catalog.md`'s catalog page (separate, not
+   yet built) would want the same order for consistency.
+3. **The cover image replaces the brand-mark icon**, rendered via `next/image` + `urlFor(...)` sized
+   for the 72px tile at 2x, with `iconClassName="overflow-hidden rounded-lg"` (no background color —
+   a photo fills the tile). `CourseMarks.tsx` is left untouched since `app/design-system/page.tsx`
+   still references it.
+4. **Each card links to `/courses/<slug>`** (the route built in the previous task), wrapping
+   `CourseCard` in a `Link` — matching how the design implies these are clickable entry points.
+5. **Meta comes straight from the data**: `formatLevel(level)`, `formatDuration(totalDurationSeconds)`,
+   `moduleCount`. A course missing a `slug` is skipped (can't route to it); other optional fields
+   (`summary`, `coverImage`) degrade to an empty string / no image rather than a guess.
+6. Layout, spacing, typography, and the "View all courses" link are untouched.
 
 ## Files to touch
 
-- `app/page.tsx` — fetch, map, drop the placeholder array and the brand-mark imports.
-- No changes to `components/cards/course-card.tsx`, the queries, the schema, or the seed.
+- `app/page.tsx` — fetch `COURSES_LIST_QUERY` via `sanityFetch`, drop the placeholder array and the
+  `NextMark`/`DockerMark`/`TypeScriptMark` imports, map the first three results into `CourseCard`s
+  wrapped in `Link`s.
+- `lib/sanity/queries.ts` — change `COURSES_LIST_QUERY`'s `order(...)` clause only.
+- No changes to `components/ui/CourseCard.tsx`, the schema, or the seed.
 
 ## Requirements
 
-- Read via `sanityFetch({query: COURSES_LIST_QUERY, tags: [CACHE_TAGS.course, CACHE_TAGS.lesson]})`
-  in the server component; no client-side fetching, no token in the browser.
-- Skip courses without a slug; if the fetch returns nothing, the grid renders empty and the rest of
-  the page still renders.
-- Cover images use the stored `alt`, sized for the 72px tile at 2x.
+- Read via `sanityFetch({ query: COURSES_LIST_QUERY })` in the server component (`app/page.tsx`
+  stays a server component); no client-side fetching, no token in the browser.
+- Skip courses without a `slug`; if the fetch returns fewer than three (or zero) usable courses, the
+  grid just renders what's available — no placeholder filler.
+- Cover images use the stored `alt`, sized for the 72px tile at 2x (`width(144).height(144)`).
+- Home page metadata/hero/CTA/decoration sections are untouched.
 
 ## Security considerations
 
-- Same as the course page: server-only client and token, only `NEXT_PUBLIC_*` values reach the
-  browser through `urlFor`, and the page performs no writes.
+- Same as the course page: the Sanity client and token stay server-only; `app/page.tsx` imports only
+  `sanityFetch`/`urlFor`, never the client or token modules directly.
+- No project id, dataset, or token reaches the browser beyond the already-public `NEXT_PUBLIC_*`
+  values `urlFor` needs.
 
 ## Acceptance criteria
 
 1. The home page's three cards show real seeded courses with their cover art, level, duration, and
-   module count — no hardcoded copy left in `app/page.tsx`.
-2. Card links resolve to working `/courses/<slug>` pages.
-3. The section looks the same as `design/vertex-home.png` apart from the content itself.
+   module count — no hardcoded copy or brand-mark SVGs left in `app/page.tsx` for this section.
+2. Popular courses (seed has several with `popular: true`) appear before non-popular ones.
+3. Each card links to a working `/courses/<slug>` page.
+4. The section's layout matches `design/vertex-home.png` apart from the content itself (real photos
+   instead of brand-mark tiles).
+5. `sanity.types.ts`'s `COURSES_LIST_QUERY_RESULT` still matches after the query's order clause
+   changes (typegen re-run, no field shape change expected).
 
 ## Checks to run
 
-`npm run typecheck`, `npm run lint`, `npm run build`, then `npm run dev` and load `/`.
+1. `npm --prefix studio run typegen` (query text changed)
+2. `npm run typecheck`
+3. `npm run lint`
+4. `npm run build`
+5. `npm run dev` and load `/`
 
 ## Manual test steps
 
-1. Open `http://localhost:3000/` and confirm the three cards match seeded courses.
-2. Click each card and confirm the course page loads.
-3. Compare the section against `design/vertex-home.png`.
+1. Open `http://localhost:3000/` and confirm the three cards show real seeded courses (titles,
+   cover photos, level, duration, module count).
+2. Confirm popular-flagged courses show up first.
+3. Click each card and confirm it navigates to the matching `/courses/<slug>` page.
+4. Compare the section against `design/vertex-home.png` (layout/spacing unchanged, content is now
+   real).
