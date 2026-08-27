@@ -2,194 +2,186 @@
 
 ## Goal
 
-Build the course detail route `/courses/[slug]`, reproducing `design/vertex-course.png` and wired to
-the seeded Sanity content through the existing server-only data layer. Read-only: the page renders
-stored content and nothing on it writes.
+Build the course detail route `/courses/[slug]`, reproducing `design/vertex-course.png`, wired to
+real Sanity content through the existing server-only data layer. Read-only: the page renders stored
+content and nothing on it writes.
+
+## Prerequisite: the dataset is currently empty of content
+
+Live check against the `production` dataset (via the server-only client with the read token) found
+**135 documents, all `sanity.imageAsset`, zero `course`/`lesson`/`instructor`/`category` docs.**
+`studio/seed.ndjson` (141 lines: 6 categories + 5 instructors + 10 courses + 120 lessons, matching
+`prompts/seed-sample-content.md`) exists on disk but has never been imported. My prior memory note
+claiming the dataset was already seeded is stale — corrected.
+
+So "wired with seeded content" requires importing `studio/seed.ndjson` first:
+
+```
+cd studio && npx sanity dataset import seed.ndjson production --replace
+```
+
+This writes to the shared Sanity dataset (not just local files), so I'm calling it out for your
+explicit go-ahead rather than running it silently — confirm in the approval question below.
+`--replace` is safe here: every document in the file has a deterministic `_id`, so re-running is
+idempotent and only touches these 141 docs, nothing else in the dataset.
 
 ## Skills and docs read
 
-- `AGENTS.md` — §3 UI work (reference image is the source of truth, reuse existing components,
-  responsive down to mobile), §5 structure (pages are read-only, all Sanity reads are server side),
-  §7 decisions (module/lesson numbers derived from order, content structured not markdown, progress
-  is a real feature with a Clerk-keyed record — not built yet), §8 the course/module/lesson model,
-  §12 (private dataset, token stays on the server), §13 checks.
-- `~/.claude/skills/sanity-best-practices/references/typegen.md` — `sanity.cli.ts` typegen config,
-  `overloadClientMethods` typing `client.fetch` off `defineQuery`, the extract + generate cycle.
+- `AGENTS.md` — §3 (reference image is source of truth, reuse existing components, responsive to
+  mobile), §5 (pages are read-only, Sanity reads are server-only), §7 (module/lesson numbers derived
+  from order not stored, progress is a real Clerk-keyed feature not yet built, content is Portable
+  Text not markdown), §8 (course/module/lesson field shapes), §12 (private dataset, token server-only,
+  keep `images.remotePatterns` scoped), §13 (checks per workspace).
 - `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/dynamic-routes.md` —
-  `params` is a Promise, `PageProps<'/courses/[slug]'>` helper, `generateStaticParams`.
-- `node_modules/next/dist/docs/01-app/01-getting-started/12-images.md` — remote images require
-  `images.remotePatterns` in `next.config.ts`.
+  `params` is a Promise in this Next version, `generateStaticParams`.
+- `node_modules/next/dist/docs/01-app/01-getting-started/12-images.md` — remote images need
+  `images.remotePatterns`.
 
 ## Code inspected
 
-- `sanity/lib/queries.ts` — `COURSE_BY_SLUG_QUERY` already projects everything this page needs
-  (card fields, `moduleCount`, `lessonCount`, `durationSeconds`, `learningOutcomes`,
-  `instructorDetail`, `modules[]` with per-module `durationSeconds` and dereferenced lessons), plus
-  `COURSE_SLUGS_QUERY` for `generateStaticParams`. **No query changes needed.**
-- `sanity/lib/fetch.ts` — `sanityFetch({query, params, tags})`, `CACHE_TAGS`.
-- `sanity/lib/client.ts`, `sanity/lib/token.ts` — server-only, token-authenticated, `server-only`.
-- `sanity/lib/image.ts` — `urlFor()`.
-- `sanity.types.ts` — already current: `COURSE_BY_SLUG_QUERY_RESULT` and the `SanityQueries` type map
-  are generated, so `client.fetch` is typed off `defineQuery` with no manual result types.
-  `studio/sanity.cli.ts` points typegen at `../{app,components,lib,sanity}/**` and writes
-  `../sanity.types.ts`; re-running `npm --prefix studio run typegen` is a no-op here.
+- `lib/sanity/queries.ts` — `COURSE_BY_SLUG_QUERY` already projects everything the page needs:
+  `learningOutcomes[]`, `instructor->`, `category->`, `totalDurationSeconds`
+  (`math::sum(modules[].lessons[]->duration)`), and `modules[]` with `lessonCount`,
+  `durationSeconds`, and dereferenced `lessons[]` (`title`, `slug`, `duration`, `freePreview`).
+  `COURSE_SLUGS_QUERY` covers `generateStaticParams`. **No query changes needed.**
+- `lib/sanity/fetch.ts` (`sanityFetch`), `client.ts`, `token.ts`, `image.ts` (`urlFor`) — all
+  server-only (`import "server-only"`), reused as-is.
 - `studio/schemaTypes/documents/course.ts`, `objects/module.ts`, `objects/learningOutcome.ts`,
-  `documents/lesson.ts` — field shapes; `learningOutcome.icon` is constrained to eight names
-  (`sparkles, layers, code, rocket, shield, gauge, puzzle, workflow`).
-- `studio/scripts/seed/content.mjs` + `seed.ndjson` — 10 courses, 4 modules × 3 lessons each,
-  cover images uploaded to the Sanity CDN, outcome icons drawn only from the eight allowed names.
-- `components/layout/page-frame.tsx`, `layout/site-header.tsx`, `nav/breadcrumbs.tsx`,
-  `ui/button.tsx` (`buttonClasses` for `next/link`), `ui/badge.tsx`, `ui/progress-bar.tsx`,
-  `ui/card.tsx`, `home/chart-decoration.tsx`, `lib/utils.ts` — all reused as-is.
-- `app/globals.css` — Tailwind v4 `@theme` tokens and the `@utility` type scale.
-- `app/page.tsx` — home page links courses to `/courses/<slug>`, which this route answers.
-- `next.config.ts` — empty; no `images.remotePatterns` yet.
-
-## Measurements taken from the reference
-
-Sampled from `design/vertex-course.png` (1024×1536) by pixel scan, treated as 1:1 CSS px inside the
-content column. Outer frame and header come from the existing `PageFrame` / `SiteHeader`.
-
-- Content column runs x≈65→948; panels are canvas-coloured with a 1px `canvas-line` border — there
-  is no white surface anywhere on this page.
-- Breadcrumb ~44px below the header rule.
-- Hero: cover 280×328, radius 16; 60px gap to the text column at x=404.
-- `POPULAR` badge 82×26 (existing `Badge variant="popular"`), 32px above the title.
-- Title: Playfair bold ~52px / 60px line height.
-- Summary: ~17px / 31px, neutral-500, wraps at ~400px column width.
-- Meta row (level · duration · modules · students): 14px labels, 16px lucide icons, ~36px gaps,
-  ~44px below the summary.
-- Buttons: primary 205×56 (radius 12, 16px label, trailing arrow), outline 142×56, 17px apart.
-- "What you'll learn" panel: x 64→949, y 565→961, 28px padding, radius 16, 1px border.
-  Heading Playfair ~24px. Two-column grid of four bordered cards, 24px gap, each ~405×154 with
-  28px padding: 48px lucide icon (primary, 1.5 stroke), Playfair ~19px title, 15px/28px description.
-- "Course Content": Playfair ~24px heading with `12 modules • 18h 24m` right-aligned, 13px
-  neutral-500.
-- Module list panel: bordered, radius 16, rows 60.5px tall separated by full-width hairlines.
-  Row = 29px numbered circle at x≈95 (bordered, with a vertical connector line running between
-  circles), Playfair ~15px title at x=153, 13px neutral-500 summary beneath, right-aligned duration
-  at x≈873 and a 16px chevron at x≈910 (32px right padding).
-- "Show all 12 modules": 249×45 bordered pill, centred and straddling the panel's bottom border.
-- Sticky bar: bordered card spanning the content column, radius 16, ~72px tall, 24px padding.
-  Left: "Your Progress" (13px neutral-500) over "35% complete" (15px, percentage in
-  neutral-900 semibold). Centre: 320×8 track, primary fill. Right: primary CTA 218×57.
-- The home page's blurred orange `ChartDecoration` sits behind the bottom of the page.
+  `documents/lesson.ts` — field shapes and validation. `learningOutcome.icon` is constrained to
+  exactly 12 keys: `layers, database, gauge, cloud, code, shield, sparkles, workflow, puzzle,
+  rocket, terminal, video` — the design's database/cloud glyphs are both in this list, no schema gap.
+- `studio/seed.ndjson` — confirms real shape: courses have `popular`, `studentCount`,
+  4 `learningOutcomes`, and (checked `nextjs-app-router-in-depth`) 4 modules of 3 lessons each; cover
+  images are `picsum.photos` uploaded as real Sanity assets at import time (`_sanityAsset`), so once
+  imported they resolve through `cdn.sanity.io`, not hotlinked.
+- `components/ui/{Navigation,Breadcrumbs,Badge,Button,ProgressBar,ResourceCard,LessonCard,
+  StatusIndicator,CourseCard,CourseMarks}.tsx`, `lib/utils.ts` (`cn`) — existing primitives to reuse.
+  No `Card`, `PageFrame`, `SiteHeader`, or `ChartDecoration` components exist yet (an earlier prompt
+  referenced paths from a different iteration of this repo — ignored, this prompt matches the
+  current tree).
+- `app/globals.css` — Tailwind v4 `@theme` tokens (`primary-*`, `neutral-*`, `success-500`,
+  `info-500`, `font-display` = Playfair, `font-sans` = Inter).
+- `app/page.tsx` — home page pattern: server-rendered `Navigation` with Clerk `SignInButton`/
+  `UserButton`/`Show`, `max-w-[1440px]` container, `px-6` gutters.
+- `next.config.ts` — empty, no `images.remotePatterns` yet.
+- `sanity.types.ts` — exists but currently only has schema-shape types (`BlockContent`, etc.), no
+  `*_QUERYResult` types. `typegen` was never re-run against `lib/sanity/queries.ts` since it was
+  added. Re-running it is a required check, not optional.
+- No `middleware.ts` exists yet (Clerk route protection is out of scope here — this page is public).
 
 ## Decisions and assumptions
 
-1. **Progress is presentational** (confirmed with the user). No progress document, no server route,
-   no Clerk read. The sticky bar renders at 0% with the label "Not started", and both
-   "Continue Learning" CTAs link to the course's first lesson. The component takes
-   `percentComplete` / `resumeHref` props so the real feature drops in without touching markup.
-2. **Broken forward links are intentional** (confirmed with the user). The breadcrumb links to
-   `/courses` and lesson rows link to `/lessons/<slug>`; both 404 until those routes are built.
-   `/lessons/<slug>` is chosen because `LESSON_BY_SLUG_QUERY` already resolves a lesson by slug
-   alone and derives its course by reverse reference.
-3. **Module and lesson numbers are derived from array order** (§7), never stored: module index + 1,
-   lesson label `"{module}.{lesson}"`.
-4. **Icons stay inside the schema's eight allowed names.** The reference happens to show a database
-   and a cloud glyph, which the schema does not offer and no seeded course uses; adding them would
-   be a schema change, so the icon map covers exactly the eight allowed values and falls back to
-   `Sparkles`. Flagged under "Needs your attention".
-5. **The instructor is not rendered.** The reference has no instructor on this page, and §3 makes
-   the reference the source of truth for visuals. Flagged under "Needs your attention".
-6. **Accordion is a client component**; the page stays a server component and passes plain data
-   down. Rows expand to reveal that module's lessons (number, title, duration, free-preview badge)
-   as links. The reference only shows the collapsed state, so the expanded row is built from the
-   existing design-system primitives.
-7. **"Show all N modules" only renders when a course has more than six modules.** The seeded courses
-   have four, so the toggle will not appear against seeded data — the reference shows twelve.
-8. Seeded cover images are photographs, not the reference's black Next.js tile, so the hero art will
-   look different from the mock. That is content, not layout.
-9. **Typegen is re-run as a check**, not a change: `sanity.types.ts` was already up to date with the
-   queries, so the page compiles against the generated projection type and the file is untouched.
+1. **Progress is presentational**, per AGENTS.md §7 (progress needs a Clerk-keyed server record that
+   doesn't exist yet). The sticky bar renders `0%` / "Not started", both CTAs ("Continue Learning")
+   link to the first lesson of the first module. The component takes `percentComplete` and
+   `resumeHref` props so the real feature drops in later without touching markup.
+2. **Lesson links point to `/lessons/<slug>`.** No lesson detail route exists yet (separate prompt,
+   `prompts/lesson-page.md`), so these links will 404 until that's built — expected and out of scope
+   here.
+3. **Module and lesson numbers are derived from array order**, never stored: module index + 1,
+   lesson label `"{moduleNumber}.{lessonNumber}"`.
+4. **Icon map covers exactly the schema's 12 `learningOutcome.icon` values**, mapped to lucide-react
+   equivalents (`layers→Layers, database→Database, gauge→Gauge, cloud→Cloud, code→Code2,
+   shield→Shield, sparkles→Sparkles, workflow→Workflow, puzzle→Puzzle, rocket→Rocket,
+   terminal→Terminal, video→Video`), with `Sparkles` as an unreachable fallback for type safety.
+5. **"Show all N modules" only renders past 6 modules.** Seeded courses have 4, so it won't appear —
+   the reference shows 12 modules, which no seeded course has.
+6. **Instructor is not rendered on this page** — the reference has no instructor block here (it likely
+   surfaces on the lesson page instead, per the video/notes-plus-instructor pattern implied by
+   AGENTS.md §8). Flagged under "Needs your attention" in case that's wrong.
+7. **Cover art will be a Picsum photo, not the reference's black "N" tile** — that's seeded content,
+   not a layout deviation.
+8. **Accordion is a small client component**; the page itself stays a server component and passes
+   plain serializable data down.
 
 ## Files to touch
 
-- `app/courses/[slug]/page.tsx` — new. Server component: fetch, `notFound()`, `generateMetadata`,
-  `generateStaticParams`, hero, outcomes panel, course content, sticky bar, decoration.
-- `components/course/course-hero.tsx` — new. Cover, badge, title, summary, meta row, CTAs.
-- `components/course/learning-outcomes.tsx` — new. Panel + outcome cards + the icon map.
-- `components/course/course-content.tsx` — new, `"use client"`. Module accordion + show-all toggle.
-- `components/course/course-progress-bar.tsx` — new, sticky bar (presentational).
-- `lib/format.ts` — new. `formatDuration(seconds)` → `18h 24m` / `45m`, `formatCount(n)` → `2.1k`,
-  `formatLevel(level)` → `Intermediate`, `moduleLabel` / `lessonLabel` helpers.
-- `next.config.ts` — add `images.remotePatterns` for `cdn.sanity.io`.
-- `lib/routes.ts` — new. `coursesHref` / `courseHref` / `lessonHref`, so link shapes live in one
-  place as routes land.
-- `sanity.types.ts` — regenerated as a check; already current, so unchanged (do not hand-edit).
-- No changes to `sanity/lib/queries.ts`, the Studio schema, or the seed.
+- `app/courses/[slug]/page.tsx` — new. Server component: `sanityFetch(COURSE_BY_SLUG_QUERY)`,
+  `notFound()` on miss, `generateMetadata`, `generateStaticParams` from `COURSE_SLUGS_QUERY`.
+  Composes hero, outcomes panel, course content, sticky progress bar.
+- `components/course/CourseHero.tsx` — new. Cover image, popular badge, title, summary, meta row
+  (level/duration/modules/students), primary + secondary CTA buttons.
+- `components/course/LearningOutcomes.tsx` — new. "What you'll learn" panel, 2-column card grid, the
+  12-key icon map.
+- `components/course/CourseContent.tsx` — new, `"use client"`. Module list with expand/collapse per
+  row, revealing that module's lessons; "Show all N modules" toggle past 6.
+- `components/course/CourseProgressBar.tsx` — new. Sticky bottom bar (presentational), reuses
+  `ProgressBar`.
+- `lib/format.ts` — new. `formatDuration(seconds)` → `"18h 24m"` / `"45m"`,
+  `formatStudentCount(n)` → `"2.1k"`, `formatLevel(level)` → `"Intermediate"`.
+- `next.config.ts` — add `images.remotePatterns` scoped to `cdn.sanity.io`.
+- `sanity.types.ts` — regenerated via typegen; page consumes the generated
+  `COURSE_BY_SLUG_QUERYResult` type, no hand-written result types, no `any`.
+- No changes to `lib/sanity/queries.ts`, the Studio schema, or `studio/seed.ndjson`.
 
 ## Requirements
 
-- Server component page; every Sanity read goes through `sanityFetch` with
-  `tags: [CACHE_TAGS.course, CACHE_TAGS.lesson]`.
+- Server component page; the Sanity read uses `sanityFetch` with a `revalidate` (no write path
+  exists yet to make tag-based invalidation worthwhile).
 - `generateStaticParams` from `COURSE_SLUGS_QUERY`; unknown slug → `notFound()`.
 - `generateMetadata` returns the course title and summary.
-- Cover image via `next/image` + `urlFor(...)`, with the stored `alt`, sized for the 280×328 box at
-  2x, `priority` on the hero image.
-- Derived values only: duration from `durationSeconds`, counts from `moduleCount` / `lessonCount`,
-  module numbers from order. Nothing invented, nothing hardcoded that Sanity supplies.
-- Optional fields degrade: no `learningOutcomes` → the panel is not rendered; no `popular` → no
-  badge; missing `studentCount` → the meta item is dropped; a module with no summary just omits it.
-- Responsive down to mobile: hero stacks (cover above text, full width), outcome grid collapses to
-  one column, module rows keep the number and title but let the duration wrap, the sticky bar
-  stacks and the progress track goes full width. Desktop must match the reference exactly.
-- Accessibility: accordion buttons carry `aria-expanded` and `aria-controls`, the chevron is
-  `aria-hidden` and rotates on open, every interactive element keeps the project's
-  `focus-visible:ring-2 ring-primary-500` treatment, and the numbered circles are decorative.
-- Reuse `Badge`, `Breadcrumbs`, `buttonClasses`, `ProgressBar`, `PageFrame`, `SiteHeader`,
-  `ChartDecoration`, `cn`. No new UI primitives, no `cva`, no new dependencies.
-- Tokens over raw hex; lucide-react for icons; lookup maps for variants.
+- Cover image via `next/image` + `urlFor(...)` using the stored `alt`, `priority` on the hero image.
+- Derived values only: durations from `totalDurationSeconds` / per-module `durationSeconds`, counts
+  from `count(modules)` / `lessonCount`, module/lesson numbers from array order. Nothing invented.
+- Optional fields degrade gracefully: no `popular` → no badge, no `learningOutcomes` → panel omitted,
+  missing `studentCount` → that meta item dropped, a module with no `summary` just omits it.
+- Responsive to mobile: hero stacks (cover above text), outcome grid collapses to one column, module
+  rows keep number + title with duration wrapping, sticky bar stacks and its track goes full width.
+  Desktop matches the reference exactly.
+- Accessibility: accordion trigger buttons carry `aria-expanded`/`aria-controls`, chevron is
+  `aria-hidden` and rotates on open, interactive elements keep visible focus states, numbered circles
+  are decorative (not in the tab order).
+- Reuse `Badge`, `Breadcrumbs`, `Button`, `ProgressBar`, `Navigation`, `cn`. No new UI primitives
+  beyond the `components/course/*` composition layer, no new dependencies.
+- Tailwind tokens over raw hex; `lucide-react` for icons; lookup maps (not switch chains) for variant
+  → icon/class mapping, matching the existing `Badge`/`StatusIndicator` pattern.
 
 ## Security considerations
 
-- The Sanity client and token stay server side; the new client component receives only plain
-  serialisable content props and never imports anything under `sanity/lib/`.
-- No token, project id, or dataset value reaches the browser beyond the already-public
-  `NEXT_PUBLIC_*` values used by `urlFor`.
-- The page is public (browsing is public per §7); nothing here is gated and nothing writes.
+- Sanity client and read token stay server-only; new client component (`CourseContent`) receives only
+  plain serializable props, never imports `lib/sanity/*` directly.
+- No project id, dataset, or token reaches the browser beyond the already-public `NEXT_PUBLIC_*`
+  values `urlFor` needs.
+- Page is public (browsing is public per AGENTS.md §7); nothing here is gated, nothing writes.
 - `images.remotePatterns` is scoped to `https://cdn.sanity.io/**`, not a wildcard host.
 
 ## Acceptance criteria
 
-1. `/courses/nextjs-app-router-in-depth` renders the seeded course: title, summary, level, total
-   duration, module count, student count, popular badge, cover image.
-2. "What you'll learn" shows the course's four seeded outcomes with their mapped icons.
-3. Course Content lists all four seeded modules in order, numbered 1–4, each with its summary and
-   its summed duration; the show-all toggle is absent at four modules.
-4. Expanding a module reveals its three lessons, labelled `1.1`–`1.3`, each linking to
-   `/lessons/<slug>` with its duration and a free-preview badge where applicable.
-5. The sticky bar renders at 0% / "Not started" and both CTAs link to the first lesson of the first
-   module.
-6. An unknown slug returns the 404 page.
-7. Desktop layout matches `design/vertex-course.png`; the page is usable at 375px wide with no
-   horizontal scroll.
-8. `sanity.types.ts` contains `COURSE_BY_SLUG_QUERYResult`, and the page compiles against it with
-   no `any` and no hand-written result types.
+1. `/courses/nextjs-app-router-in-depth` renders: title, summary, level, total duration, module
+   count, student count, popular badge, cover image — all from the imported seed.
+2. "What you'll learn" shows the course's 4 seeded outcomes with correctly mapped icons.
+3. Course Content lists all 4 seeded modules in order, numbered 1–4, each with its summary and
+   summed duration; the show-all toggle is absent (only 4 modules).
+4. Expanding a module reveals its 3 lessons labelled `1.1`–`1.3`, each with duration and a
+   free-preview badge where applicable, linking to `/lessons/<slug>`.
+5. The sticky bar renders `0%` / "Not started"; both CTAs link to the first lesson of module 1.
+6. An unknown slug (`/courses/does-not-exist`) returns the 404 page.
+7. Desktop layout matches `design/vertex-course.png`; usable at 375px with no horizontal scroll.
+8. `sanity.types.ts` contains `COURSE_BY_SLUG_QUERYResult` and the page compiles against it with no
+   `any` and no hand-written result types.
 
 ## Checks to run
 
-From the repo root unless stated:
+From the repo root unless noted:
 
-1. `npm --prefix studio run typegen` — regenerate `sanity.types.ts` from the schema + queries.
-2. `npm run typecheck`
-3. `npm run lint`
-4. `npm run build` (routes and config changed)
-5. `npm run dev` and exercise the manual steps below.
+1. `cd studio && npx sanity dataset import seed.ndjson production --replace` (only after your
+   go-ahead — see Prerequisite above).
+2. `npm --prefix studio run typegen`
+3. `npm run typecheck`
+4. `npm run lint`
+5. `npm run build` (new route + config change)
+6. `npm run dev` and walk through the manual steps below.
 
 ## Manual test steps
 
-1. `npm --prefix studio run typegen`, then `npm run dev`.
-2. Open `http://localhost:3000/courses/nextjs-app-router-in-depth`. Confirm the hero (cover, badge,
-   title, summary, meta row, both buttons) matches the reference layout.
-3. Compare against `design/vertex-course.png` side by side at 1440px wide.
-4. Click a module row: it expands to its lessons; click again: it collapses. Check the chevron
-   rotates and keyboard focus rings are visible when tabbing through.
-5. Click a lesson link: it navigates to `/lessons/<slug>` and 404s (expected until that route
-   exists). Same for "All Courses" → `/courses`.
-6. Confirm the sticky bar stays pinned above the page bottom while scrolling and its CTA points at
-   the first lesson.
-7. Resize to 375px: hero stacks, outcomes go single column, nothing scrolls horizontally.
-8. Open `/courses/does-not-exist` and confirm the 404 page.
-9. Visit `/` and click through a course card to confirm the home page's links resolve.
+1. After the import and `npm run dev`, open `http://localhost:3000/courses/nextjs-app-router-in-depth`.
+   Confirm hero (cover, POPULAR badge, title, summary, meta row, both buttons).
+2. Compare side by side against `design/vertex-course.png` at 1440px wide.
+3. Click a module row: it expands to its lessons; click again: collapses. Verify the chevron rotates
+   and focus rings are visible tabbing through.
+4. Click a lesson link — expect a 404 (no lesson route yet, out of scope).
+5. Confirm the sticky bar's "Continue Learning" points at the course's first lesson.
+6. Resize to 375px: hero stacks, outcomes go single-column, no horizontal scroll anywhere.
+7. Open `/courses/does-not-exist` and confirm the 404 page.
+8. Visit `/` and click through an existing `CourseCard` (once wired to real slugs — separate task) or
+   navigate directly to confirm routing resolves.
