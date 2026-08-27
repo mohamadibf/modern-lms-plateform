@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CourseCard } from "@/components/ui/CourseCard";
 import { Navigation } from "@/components/ui/Navigation";
-import { SearchInput } from "@/components/ui/Input";
+import { SearchForm } from "@/components/search/SearchForm";
 import { formatDuration, formatLevel } from "@/lib/format";
 import { urlFor } from "@/lib/sanity/image";
 import { sanityFetch } from "@/lib/sanity/fetch";
@@ -79,9 +79,8 @@ export default async function Home() {
           <Button variant="primary" className="mt-8" icon={<ArrowRight className="size-4" />}>
             Explore Courses
           </Button>
-          <SearchInput
+          <SearchForm
             placeholder="Ask anything about your learning…"
-            shortcut="⌘ K"
             className="mt-10 w-full max-w-2xl"
           />
         </div>

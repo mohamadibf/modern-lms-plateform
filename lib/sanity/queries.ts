@@ -88,14 +88,21 @@ export const LESSON_BY_SLUG_QUERY = defineQuery(`
 
 export const COURSE_FOR_LESSON_QUERY = defineQuery(`
   *[_type == "course" && references($lessonId)][0] {
+    _id,
     title,
     "slug": slug.current,
     level,
+    coverImage,
     modules[] {
+      _key,
       title,
+      "durationSeconds": math::sum(lessons[]->duration),
       lessons[]-> {
         _id,
-        "slug": slug.current
+        title,
+        "slug": slug.current,
+        duration,
+        freePreview
       }
     }
   }
@@ -125,6 +132,28 @@ export const INSTRUCTOR_BY_SLUG_QUERY = defineQuery(`
       "slug": slug.current,
       coverImage,
       level
+    }
+  }
+`);
+
+export const SEARCH_LESSONS_BY_IDS_QUERY = defineQuery(`
+  *[_type == "lesson" && _id in $ids] {
+    _id,
+    title,
+    "slug": slug.current,
+    duration,
+    freePreview,
+    keyPoints,
+    thumbnail,
+    _createdAt,
+    "course": *[_type == "course" && references(^._id)][0] {
+      title,
+      "slug": slug.current,
+      coverImage,
+      modules[] {
+        title,
+        lessons[]-> { _id }
+      }
     }
   }
 `);

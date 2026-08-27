@@ -5,6 +5,9 @@ export default defineCliConfig({
     projectId: process.env.SANITY_STUDIO_PROJECT_ID,
     dataset: process.env.SANITY_STUDIO_DATASET,
   },
+  deployment: {
+    appId: "qon4kgoiwqmjivoui6yfitqe",
+  },
   typegen: {
     enabled: true,
     path: "../{app,lib}/**/*.{ts,tsx}",
