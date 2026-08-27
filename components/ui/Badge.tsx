@@ -10,8 +10,8 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  video: "bg-neutral-900 text-white",
-  lesson: "bg-info-500 text-white",
+  video: "bg-primary-100 text-primary-500",
+  lesson: "bg-info-100 text-info-500",
   popular: "bg-primary-100 text-primary-500",
   neutral: "bg-neutral-100 text-neutral-700",
 };
